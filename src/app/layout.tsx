@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FuelTrack — Smart Fuel Tracking Platform",
+  title: "Cartrack Fleet — Sistem Manajemen Armada",
   description:
-    "Track your vehicle fuel consumption, monitor efficiency, and optimize routes with real-time 3D maps.",
+    "Pemimpin kelas dunia dalam solusi manajemen armada. Live tracking, fuel monitoring, driver behavior, dan geofence management.",
 };
 
 export default function RootLayout({

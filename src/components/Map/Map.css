@@ -11,23 +11,22 @@
 
 /* Override MapLibre default controls */
 .maplibregl-ctrl-group {
-  background: rgba(15, 15, 25, 0.85) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-dark) !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.05) !important;
   overflow: hidden;
 }
 
 .maplibregl-ctrl-group button {
   background-color: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-bottom: 1px solid var(--border) !important;
   width: 36px !important;
   height: 36px !important;
 }
 
 .maplibregl-ctrl-group button:hover {
-  background-color: rgba(99, 102, 241, 0.2) !important;
+  background-color: var(--bg-primary) !important;
 }
 
 .maplibregl-ctrl-group button + button {
@@ -35,19 +34,21 @@
 }
 
 .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
-  filter: invert(1) brightness(1.5);
+  filter: none !important; /* Remove invert */
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgba(15, 15, 25, 0.6) !important;
-  backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.5) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-secondary) !important;
   font-size: 10px !important;
-  border-radius: 8px 0 0 0 !important;
+  border-radius: 0 !important;
+  border: 1px solid var(--border-dark) !important;
+  border-bottom: none !important;
+  border-right: none !important;
 }
 
 .maplibregl-ctrl-attrib a {
-  color: rgba(129, 140, 248, 0.7) !important;
+  color: var(--accent) !important;
 }
 
 /* Loading overlay */
@@ -57,11 +58,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a14;
+  background: var(--bg-primary);
   z-index: 100;
-  transition:
-    opacity 0.6s ease,
-    visibility 0.6s ease;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .mapLoading.loaded {
@@ -80,48 +79,22 @@
 .loadingSpinner {
   width: 48px;
   height: 48px;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  border: 3px solid rgba(99, 102, 241, 0.15);
-  border-top-color: #6366f1;
   animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .loadingText {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-primary);
   font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-
-/* Car marker */
-.carMarker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 2px 8px rgba(99, 102, 241, 0.6));
-  transition: transform 0.1s linear;
-}
-
-.carMarker::after {
-  content: '';
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.2);
-  animation: carPulse 2s ease-in-out infinite;
-  z-index: -1;
-}
-
-@keyframes carPulse {
-  0%, 100% { transform: scale(0.8); opacity: 0.6; }
-  50% { transform: scale(1.5); opacity: 0; }
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 /* Map controls group */
@@ -138,79 +111,79 @@
 .controlBtn {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(12px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.25s ease;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.05);
+  transition: all 0.15s ease;
 }
 
 .controlBtn:hover {
-  transform: scale(1.1);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(0,0,0,0.08);
 }
 
 .playPauseBtn {
-  background: rgba(99, 102, 241, 0.9);
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+  background: var(--text-primary);
+  color: #fff;
 }
 
 .playPauseBtn:hover {
-  box-shadow: 0 6px 28px rgba(99, 102, 241, 0.6);
-}
-
-.followBtn {
-  background: rgba(16, 185, 129, 0.9);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
-}
-
-.followBtn:hover {
-  box-shadow: 0 6px 28px rgba(16, 185, 129, 0.6);
+  background: var(--accent);
 }
 
 /* Follow mode badge */
 .followBadge {
   position: absolute;
-  top: 70px;
+  top: 76px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 60;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 8px 16px;
-  background: rgba(16, 185, 129, 0.9);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
-  animation: badgeIn 0.3s ease-out;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-md);
+  animation: badgeIn 0.2s ease-out;
+}
+
+.followBadgeStatus {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: #fff;
 }
 
 .followExitBtn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 11px;
-  margin-left: 2px;
-  transition: background 0.2s;
+  font-size: 12px;
+  margin-left: 4px;
+  transition: all 0.15s;
 }
 
 .followExitBtn:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--text-primary);
+  color: #fff;
 }
 
 @keyframes badgeIn {
@@ -220,23 +193,24 @@
 
 /* MapLibre Popup styling */
 .maplibregl-popup-content {
-  background: rgba(15, 15, 30, 0.92) !important;
-  backdrop-filter: blur(12px);
-  color: #f0f0f5 !important;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px !important;
-  padding: 10px 14px !important;
-  font-size: 13px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-dark);
+  border-radius: 0 !important;
+  padding: 12px 16px !important;
+  font-size: 12px;
+  font-family: var(--font);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.05) !important;
 }
 
 .maplibregl-popup-tip {
-  border-top-color: rgba(15, 15, 30, 0.92) !important;
+  border-top-color: var(--border-dark) !important;
 }
 
 .maplibregl-popup-close-button {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--text-secondary) !important;
   font-size: 16px !important;
+  padding: 4px !important;
 }
 
 /* Side panel */
@@ -244,17 +218,16 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: 340px;
+  width: 380px;
   height: 100%;
   z-index: 55;
-  background: rgba(10, 10, 20, 0.88);
-  backdrop-filter: blur(20px);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-card);
+  border-left: 1px solid var(--border-dark);
+  box-shadow: var(--shadow-lg);
   transform: translateX(100%);
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
 }
 
 .sidePanel.open {
@@ -267,25 +240,25 @@
   right: 0;
   transform: translateY(-50%);
   z-index: 56;
-  width: 32px;
-  height: 56px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 36px;
+  height: 64px;
+  border: 1px solid var(--border-dark);
   border-right: none;
-  border-radius: 8px 0 0 8px;
-  background: rgba(10, 10, 20, 0.85);
-  backdrop-filter: blur(12px);
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -4px 0 12px rgba(0,0,0,0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .panelToggle.open {
-  right: 340px;
+  right: 380px;
 }
 
 .panelToggle svg {
+  fill: var(--text-primary);
   transition: transform 0.3s ease;
 }
 
@@ -294,38 +267,88 @@
 }
 
 .panelToggle:hover {
-  background: rgba(99, 102, 241, 0.3);
+  background: var(--bg-primary);
 }
 
 .panelHeader {
-  padding: 20px 20px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-dark);
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .panelHeader h3 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  color: #f0f0f5;
-  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panelStatusBadge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Tabs */
+.panelTabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.panelTab {
+  flex: 1;
+  background: var(--bg-card);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 12px 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+
+.panelTab:last-child {
+  border-right: none;
+}
+
+.panelTab:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.panelTab.active {
+  background: var(--text-primary);
+  color: #fff;
 }
 
 .panelBody {
-  padding: 16px 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .panelSection {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .panelLabel {
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -333,67 +356,218 @@
 .panelValue {
   font-size: 14px;
   font-weight: 600;
-  color: #f0f0f5;
+  color: var(--text-primary);
 }
 
-.statusActive {
-  color: #34d399;
+.deliveryStatus {
+  color: var(--accent);
+  background: transparent;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.geofenceTag {
+  color: var(--warning);
 }
 
 .panelDivider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.06);
-  margin: 2px 0;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.panelGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.panelGridItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .fuelBar {
   width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 2px;
+  height: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-dark);
+  margin-top: 4px;
 }
 
 .fuelFill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
-  border-radius: 3px;
   transition: width 0.3s ease;
 }
 
-@media (max-width: 768px) {
-  .sidePanel {
-    width: 280px;
-  }
-
-  .panelToggle.open {
-    right: 280px;
-  }
+/* Safety Score Widget */
+.safetyScoreWidget {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0;
 }
 
-/* Truck fleet list */
+.safetyRing {
+  width: 80px;
+  height: 80px;
+  border: 4px solid;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.safetyScoreValue {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.safetyScoreLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.safetyDetails {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.safetyDetailItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.safetyDetailIcon {
+  width: 20px;
+  text-align: center;
+}
+
+.safetyDetailText {
+  color: var(--text-primary);
+}
+
+/* Mini Chart */
+.miniChart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 80px;
+  padding-top: 10px;
+}
+
+.miniChartCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+}
+
+.miniChartBar {
+  width: 100%;
+  background: var(--text-primary);
+  transition: height 0.3s;
+  min-height: 2px;
+}
+
+.miniChartLabel {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Truck Alerts List */
+.truckAlertsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.truckAlertItem {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+}
+
+.truckAlertItem.alert-danger { border-left-color: var(--danger); }
+.truckAlertItem.alert-warning { border-left-color: var(--warning); }
+.truckAlertItem.alert-success { border-left-color: var(--success); }
+.truckAlertItem.alert-info { border-left-color: var(--info); }
+
+.truckAlertDot {
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.truckAlertContent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.truckAlertText {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.truckAlertTime {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .sidePanel { width: 320px; }
+  .panelToggle.open { right: 320px; }
+}
+
+/* Truck fleet list (Restyled) */
 .truckList {
   position: absolute;
-  bottom: 24px;
-  left: 16px;
+  bottom: 110px; /* Shifted up to avoid overlapping with statsBar */
+  left: 24px;
   z-index: 55;
-  width: 280px;
-  background: rgba(10, 10, 20, 0.88);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  overflow: hidden;
-  animation: badgeIn 0.3s ease-out;
+  width: 300px; /* Slightly narrower */
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
 }
 
 .truckListTitle {
-  padding: 14px 16px 10px;
-  font-size: 13px;
+  padding: 12px 16px;
+  font-size: 11px;
   font-weight: 700;
-  color: #f0f0f5;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-dark);
   margin: 0;
+  background: var(--bg-primary);
+  letter-spacing: 0.5px;
 }
 
 .truckListItem {
@@ -404,14 +578,14 @@
   padding: 10px 16px;
   background: none;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s;
 }
 
 .truckListItem:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-primary);
 }
 
 .truckListItem:last-child {
@@ -419,54 +593,95 @@
 }
 
 .truckDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
-  box-shadow: 0 0 6px currentColor;
 }
 
 .truckItemInfo {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
+.truckItemNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .truckItemName {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #f0f0f5;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.truckItemStatusDot {
+  font-size: 8px;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
 }
 
 .truckItemRoute {
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.truckItemDriver {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.truckItemRight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
 .truckItemFuel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .fuelBarSmall {
-  width: 40px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-  overflow: hidden;
+  width: 36px;
+  height: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-dark);
 }
 
 .fuelText {
   font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
-  min-width: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 28px;
   text-align: right;
+}
+
+.truckAlertTag {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--danger);
+  color: #fff;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

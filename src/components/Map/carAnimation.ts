@@ -68,9 +68,9 @@ export function calculateBearing(
 export function interpolateRoute(
   points: RoutePoint[],
   progress: number
-): { position: RoutePoint; bearing: number } {
+): { position: RoutePoint; bearing: number; traveledMeters: number; segmentIndex: number } {
   if (points.length < 2) {
-    return { position: points[0], bearing: 0 };
+    return { position: points[0], bearing: 0, traveledMeters: 0, segmentIndex: 0 };
   }
 
   // Calculate total distance
@@ -111,13 +111,13 @@ export function interpolateRoute(
 
   const bearing = calculateBearing(p1, p2);
 
-  return { position, bearing };
+  return { position, bearing, traveledMeters: targetDist, segmentIndex: segIdx };
 }
 
 /**
  * Haversine distance between two points in meters
  */
-function haversineDistance(a: RoutePoint, b: RoutePoint): number {
+export function haversineDistance(a: RoutePoint, b: RoutePoint): number {
   const R = 6371e3;
   const φ1 = (a.lat * Math.PI) / 180;
   const φ2 = (b.lat * Math.PI) / 180;
