@@ -16,7 +16,7 @@ const FOLLOW_ZOOM = 17.2;
 const FOLLOW_PITCH = 60;
 const LERP_FACTOR = 0.08;
 const SNAPSHOT_MS = 300;
-const SPEEDS = [10, 30, 60] as const;
+const SPEEDS = [1, 10, 30, 60] as const;
 
 const STOP_COLORS = { terlayani: "#00a854", terlewat: "#e60000", tak_terverifikasi: "#ff8c00", menunggu: "#ffffff" } as const;
 const STOP_LABEL = { terlayani: "SERVED", terlewat: "NOT SERVED", tak_terverifikasi: "UNVERIFIED", menunggu: "WAITING" } as const;
@@ -51,13 +51,13 @@ export default function Map({ onSnapshot, focusRequest }: MapProps) {
   const tripsRef = useRef<Trip[]>([]);
   const runtimeRef = useRef<Record<string, TruckRuntime>>({});
   const simTRef = useRef(0);
-  const speedRef = useRef<number>(SPEEDS[1]);
+  const speedRef = useRef<number>(SPEEDS[0]);
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [tripsReady, setTripsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
-  const [speed, setSpeed] = useState<number>(SPEEDS[1]);
+  const [speed, setSpeed] = useState<number>(SPEEDS[0]);
   const [snapshot, setSnapshot] = useState<FleetSnapshot | null>(null);
 
   const [followId, setFollowId] = useState<string | null>(null);
