@@ -15,7 +15,6 @@ import {
   detectRouteDeviations,
   detectStopVisits,
   distanceToPolylineM,
-  estimateFuelL,
   estimateFuelML,
   findDataGaps,
   gpsDistanceM,
@@ -29,6 +28,7 @@ import {
   type FuelReconciliation,
   type GpsPing,
   type LngLat,
+  type MLFeatures,
   type ServicePointRef,
   type StopStatus,
   type StopVisit,
@@ -77,6 +77,11 @@ export interface Trip {
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10;
+
+/** Fitur model ML BBM (purwarupa: bobot variabel) pada waktu ritase `t`. */
+function mlFeatures(vehicle: Vehicle, t: number, speedKmh: number, servedCount: number): MLFeatures {
+  return { speed: speedKmh / 40 || 0.5, idle: (t / 3600) * 0.1, load: 0.85, stop: servedCount / 10, road: 1.0, vehicle: vehicle.code.length * 0.1 };
+}
 
 function cumulative(path: LngLat[]): number[] {
   const cum = [0];
@@ -191,7 +196,14 @@ export function buildTrip(
   }
 
   const validatedCount = stops.filter((s) => s.validated).length;
-  const plannedEstimateL = estimateFuelL(partial.plannedLengthM / 1000, validatedCount, vehicle.fuel);
+  // Kebutuhan BBM rute standar memakai model yang sama dengan analitik, agar
+  // `adminFuelFactor` skenario = rasio BBM administrasi terhadap kebutuhan wajar.
+  const plannedEstimateL = estimateFuelML(
+    partial.plannedLengthM / 1000,
+    validatedCount,
+    vehicle.fuel,
+    mlFeatures(vehicle, durationS, 0, validatedCount)
+  );
 
   return {
     ...partial,
@@ -262,8 +274,12 @@ export function tripStateAt(trip: Trip, t: number): TripState {
   const statuses = stopStatuses(visits, done);
   const servedCount = visits.filter((v) => v.visited).length;
   // Implementasi ML Features secara purwarupa (mock variable weight)
-  const mlFeatures = { speed: motion.speedKmh/40 || 0.5, idle: (t / 3600) * 0.1, load: 0.85, stop: servedCount / 10, road: 1.0, vehicle: trip.vehicle.code.length * 0.1 };
-  const fuelEstimateL = estimateFuelML(gpsDistance / 1000, servedCount, trip.vehicle.fuel, mlFeatures);
+  const fuelEstimateL = estimateFuelML(
+    gpsDistance / 1000,
+    servedCount,
+    trip.vehicle.fuel,
+    mlFeatures(trip.vehicle, tt, motion.speedKmh, servedCount)
+  );
   
   const compliance = routeCompliancePct(gpsDistance, deviations);
   let anomaly: AnomalyScoreResult | null = null;
