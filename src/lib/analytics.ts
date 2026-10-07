@@ -232,33 +232,45 @@ export function routeCompliancePct(totalLengthM: number, deviations: DeviationSe
 
 export interface AnomalyScoreResult {
   score: number;
+  status: "normal" | "waspada" | "anomali";
   isAnomaly: boolean;
+  components: { s1: number; s2: number; s3: number; s4: number };
 }
 
 /**
  * Sistem mendeteksi pola perjalanan yang secara statistik tidak normal.
- * Anomaly Score (0-100%).
+ * Sesuai proposal: AS = 100 * sum(w_i * S_i)
  */
 export function calculateAnomalyScore(
   routeCompliance: number,
-  fuelDeviationAbs: number,
+  fuelDeviationPct: number,
   missedStops: number,
+  totalStops: number,
   dataGapCount: number
 ): AnomalyScoreResult {
-  let penalty = 0;
-  // Route non-compliance penalty
-  penalty += (100 - routeCompliance) * 1.5;
-  // Fuel deviation penalty
-  penalty += fuelDeviationAbs * 2.0;
-  // Missed stops penalty
-  penalty += missedStops * 15;
-  // Data gaps penalty
-  penalty += dataGapCount * 5;
+  // S1: Anomali BBM (Normalisasi CDF baku) -> diproksikan max(0, min(1, deviasi/30))
+  const s1 = Math.max(0, Math.min(1, Math.abs(fuelDeviationPct) / 30));
+  // S2: Deviasi rute -> 1 - (kepatuhan/100)
+  const s2 = Math.max(0, 1 - (routeCompliance / 100));
+  // S3: Pola perjalanan (Isolation Forest) -> diproksikan via data gaps dan noise
+  const s3 = Math.min(1, dataGapCount * 0.25);
+  // S4: Titik layanan -> 1 - (terkunjungi/terjadwal) = terlewat/terjadwal
+  const s4 = totalStops > 0 ? Math.min(1, missedStops / totalStops) : 0;
 
-  let score = Math.min(100, Math.round(penalty));
+  // Bobot W = (0.35; 0.25; 0.25; 0.15)
+  const AS = 100 * (0.35 * s1 + 0.25 * s2 + 0.25 * s3 + 0.15 * s4);
+  const score = Math.round(AS);
+
+  // Klasifikasi: <40 normal, 40-70 waspada, >70 anomali
+  let status: "normal" | "waspada" | "anomali" = "normal";
+  if (score > 70) status = "anomali";
+  else if (score >= 40) status = "waspada";
+
   return {
     score,
-    isAnomaly: score > 75
+    status,
+    isAnomaly: status === "anomali",
+    components: { s1, s2, s3, s4 }
   };
 }
 

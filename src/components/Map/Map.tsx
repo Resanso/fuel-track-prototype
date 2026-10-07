@@ -704,9 +704,20 @@ function SummaryTab({ trip, state }: { trip: Trip; state: TripState }) {
         </div>
         <div className="statTile" style={{ gridColumn: "1 / -1" }}>
           <span className="panelLabel">Anomaly Score (ML Pattern)</span>
-          <span className={`statTileValue ${state.anomaly?.isAnomaly ? "tone-bad" : "tone-ok"}`}>
-            {state.anomaly ? `${state.anomaly.score}%` : "Menunggu selesai"}
-          </span>
+          {state.anomaly ? (
+            <div style={{ marginTop: 4 }}>
+              <span className={`statTileValue ${state.anomaly.status === "anomali" ? "tone-bad" : state.anomaly.status === "waspada" ? "tone-warn" : "tone-ok"}`}>
+                {state.anomaly.score}% ({state.anomaly.status.toUpperCase()})
+              </span>
+              <p className="muted small" style={{ marginTop: 4, lineHeight: 1.4 }}>
+                BBM {Math.abs(state.fuel?.deviationPct ?? 0).toFixed(1)}% {(state.fuel?.deviationPct ?? 0) > 0 ? "di atas" : "di bawah"} prediksi, 
+                {state.gaps.length > 0 ? ` sinyal hilang ${state.gaps.length} kali` : " pola perjalanan wajar"}, 
+                {state.statuses.filter(s => s === "terlewat").length} dari {state.validatedStops.length} titik tidak dikunjungi.
+              </p>
+            </div>
+          ) : (
+            <span className="statTileValue tone-ok">Menunggu selesai</span>
+          )}
         </div>
       </div>
       <div className="panelDivider" />

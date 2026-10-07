@@ -271,7 +271,7 @@ export function tripStateAt(trip: Trip, t: number): TripState {
     const fuelResult = reconcileFuel(fuelEstimateL, trip.adminFuelL);
     const missedStops = statuses.filter(s => s === "terlewat").length; // we keep old strings inside analytics tests for now, but UI will show english.
     const gaps = findDataGaps(pings, trip.vehicle.gpsIntervalS);
-    anomaly = calculateAnomalyScore(compliance, fuelResult.deviationPct, missedStops, gaps.length);
+    anomaly = calculateAnomalyScore(compliance, fuelResult.deviationPct, missedStops, validatedStops.length, gaps.length);
   }
 
   return {
