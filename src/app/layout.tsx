@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cartrack Fleet — Sistem Manajemen Armada",
+  title: "SIMARDA — Monitoring Armada DLH",
   description:
-    "Pemimpin kelas dunia dalam solusi manajemen armada. Live tracking, fuel monitoring, driver behavior, dan geofence management.",
+    "Sistem monitoring armada truk sampah berbasis GPS: transparansi BBM, validasi rute, dan validasi titik pelayanan DLH.",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="id">
       <body>{children}</body>
     </html>
   );

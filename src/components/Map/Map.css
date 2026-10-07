@@ -218,9 +218,9 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: 380px;
+  width: 400px;
   height: 100%;
-  z-index: 55;
+  z-index: 70;
   background: var(--bg-card);
   border-left: 1px solid var(--border-dark);
   box-shadow: var(--shadow-lg);
@@ -239,7 +239,7 @@
   top: 50%;
   right: 0;
   transform: translateY(-50%);
-  z-index: 56;
+  z-index: 71;
   width: 36px;
   height: 64px;
   border: 1px solid var(--border-dark);
@@ -254,7 +254,7 @@
 }
 
 .panelToggle.open {
-  right: 380px;
+  right: 400px;
 }
 
 .panelToggle svg {
@@ -546,16 +546,17 @@
 /* Truck fleet list (Restyled) */
 .truckList {
   position: absolute;
-  bottom: 110px; /* Shifted up to avoid overlapping with statsBar */
+  top: 140px;
   left: 24px;
   z-index: 55;
-  width: 300px; /* Slightly narrower */
+  width: 380px;
+  overflow-y: auto;
   background: var(--bg-card);
   border: 1px solid var(--border-dark);
   box-shadow: 4px 4px 0 rgba(0,0,0,0.05);
   display: flex;
   flex-direction: column;
-  max-height: 50vh;
+  max-height: calc(100vh - 300px);
 }
 
 .truckListTitle {
@@ -685,3 +686,130 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ─── Monitoring DLH ─────────────────────────────────────── */
+.maplibregl-ctrl-top-right { top: 76px; }
+
+.followBadge { color: #fff; border-color: transparent; }
+.followBadge .followExitBtn { color: #fff; border-color: rgba(255,255,255,0.5); }
+
+.simBar {
+  position: absolute;
+  top: 84px;
+  left: 24px;
+  z-index: 55;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.05);
+}
+.simClock {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 14px;
+  border-right: 1px solid var(--border-dark);
+}
+.simClockLabel { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); letter-spacing: .5px; }
+.simClockValue { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.simBtn {
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.simBtn:last-child { border-right: none; }
+.simBtn:hover { background: var(--bg-primary); }
+.simBtn.active { background: var(--text-primary); color: #fff; }
+.simBtnPrimary { background: var(--accent); color: #fff; min-width: 72px; }
+.simBtnPrimary:hover { background: #0033cc; }
+
+.mapLegend {
+  position: absolute;
+  top: 84px;
+  right: 64px;
+  z-index: 55;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-width: 470px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.mapLegend span { display: inline-flex; align-items: center; gap: 6px; }
+.lgLine { display: inline-block; width: 22px; height: 4px; background: var(--accent); }
+.lgLine.dashed { background: repeating-linear-gradient(90deg, #94a3b8 0 5px, transparent 5px 9px); }
+.lgLine.dev { height: 8px; background: rgba(230,0,0,0.45); }
+.lgDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #111; }
+
+.truckListHint { font-weight: 500; color: var(--text-secondary); text-transform: none; margin-left: 6px; }
+.truckItemPlate { font-size: 10px; font-weight: 600; color: var(--text-secondary); }
+.truckItemRight { gap: 4px; }
+.progressBar { height: 3px; background: var(--bg-primary); margin-top: 4px; }
+.progressFill { height: 100%; }
+
+.panelSub { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+.panelHeader { gap: 12px; }
+.panelBody { gap: 16px; }
+
+.kvRow { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; padding: 3px 0; }
+.kvKey { color: var(--text-secondary); }
+.kvVal { font-weight: 600; text-align: right; }
+.statGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.statTile { border: 1px solid var(--border); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.statTileValue { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.formulaBox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.fuelCompare { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px; }
+.fuelCompareRow { display: grid; grid-template-columns: 84px 1fr 56px; align-items: center; gap: 8px; }
+.fuelCompareRow .fuelBar { margin-top: 0; }
+.fuelCompareLabel { font-size: 11px; color: var(--text-secondary); }
+.fuelCompareValue { font-size: 12px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+.verdict { margin-top: 6px; padding: 8px 12px; font-weight: 700; text-transform: uppercase; font-size: 13px; text-align: center; letter-spacing: .5px; }
+.verdict-wajar { background: #e6f6ee; color: var(--success); border: 1px solid var(--success); }
+.verdict-perlu_cek { background: #fff6e8; color: #b45f00; border: 1px solid var(--warning); }
+.verdict-anomali { background: var(--danger); color: #fff; }
+
+.muted { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.muted.small { font-size: 10.5px; }
+
+.devItem { font-size: 12px; border-left: 3px solid var(--danger); background: #fdecec; padding: 6px 10px; }
+
+.stopList { list-style: none; display: flex; flex-direction: column; gap: 6px; counter-reset: stop; }
+.stopItem { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 8px 34px; border: 1px solid var(--border); position: relative; counter-increment: stop; }
+.stopItem::before {
+  content: counter(stop);
+  position: absolute; left: 8px; top: 9px;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #111; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; background: #fff;
+}
+.stop-terlayani::before { background: var(--success); color: #fff; }
+.stop-terlewat { border-color: var(--danger); background: #fdecec; }
+.stop-terlewat::before { background: var(--danger); color: #fff; }
+.stop-tak_terverifikasi { border-color: var(--warning); background: #fff6e8; }
+.stop-tak_terverifikasi::before { background: var(--warning); color: #fff; }
+.stopName { font-size: 12px; font-weight: 700; }
+.stopMeta { font-size: 11px; color: var(--text-secondary); }
+
+.truckAlertMsg { font-size: 12px; color: var(--text-secondary); }
+.truckItemChips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

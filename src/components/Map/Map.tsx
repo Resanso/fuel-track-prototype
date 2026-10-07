@@ -1,961 +1,831 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./Map.css";
-import {
-  fetchRoute,
-  routeToGeoJSON,
-  interpolateRoute,
-  type RoutePoint,
-} from "./carAnimation";
 import { createModelLayer } from "./ThreeDModel";
+import { loadTrips } from "@/lib/simulation";
+import { motionAt, traveledPath, clockAt, type Trip, type TripState } from "@/lib/trip";
+import { computeSnapshot, type FleetSnapshot } from "@/lib/snapshot";
+import { DEFAULT_FUEL_THRESHOLDS, DEFAULT_ROUTE_OPTIONS, DEFAULT_STOP_OPTIONS } from "@/lib/analytics";
+import { formatClock } from "@/lib/fleetData";
+import { AVAILABILITY_TARGET_PCT } from "@/lib/alerts";
 
-// ─── Truck fleet data (Cartrack-enhanced) ─────────────────────
-interface DriverBehavior {
-  safetyScore: number; // 0-100
-  speedingEvents: number;
-  harshBraking: number;
-  sharpTurns: number;
-}
-
-interface TruckInfo {
-  id: string;
-  name: string;
-  driver: string;
-  plate: string;
-  carType: string;
-  fuelCapacity: number;
-  initialFuel: number;
-  fuelPercent: number; // For mini-list use only
-  speed: number;
-  routeLabel: string;
-  start: [number, number];
-  end: [number, number];
-  color: string;
-  startOffset: number;
-  // Cartrack-enhanced fields
-  status: "active" | "idle" | "stopped" | "maintenance";
-  temperature: number; // cargo temp °C
-  driverIdTag: string;
-  engineHours: number;
-  odometer: number;
-  geofenceZone: string;
-  driverBehavior: DriverBehavior;
-  deliveryStatus: string;
-  lastAlert: string;
-  fuelConsumption: number; // L/100km
-}
-
-const TRUCKS: TruckInfo[] = [
-  {
-    id: "truck-1",
-    name: "Dump Truck #01",
-    driver: "Ahmad Suryadi",
-    plate: "D 1234 ABC",
-    carType: "Hino 500 Dump",
-    fuelCapacity: 300,
-    initialFuel: 204,
-    fuelPercent: 68,
-    speed: 42,
-    routeLabel: "Gedung Sate → Alun-Alun",
-    start: [107.6186, -6.9025],
-    end: [107.6098, -6.9218],
-    color: "#6366f1",
-    startOffset: 0,
-    status: "active",
-    temperature: 4.2,
-    driverIdTag: "DRV-001",
-    engineHours: 1245,
-    odometer: 87432,
-    geofenceZone: "Bandung CBD",
-    driverBehavior: { safetyScore: 92, speedingEvents: 1, harshBraking: 0, sharpTurns: 2 },
-    deliveryStatus: "In Transit — ETA 15 min",
-    lastAlert: "Geofence entered",
-    fuelConsumption: 18.5,
-  },
-  {
-    id: "truck-2",
-    name: "Dump Truck #02",
-    driver: "Budi Santoso",
-    plate: "D 5678 DEF",
-    carType: "Mitsubishi Fuso",
-    fuelCapacity: 250,
-    initialFuel: 112,
-    fuelPercent: 45,
-    speed: 38,
-    routeLabel: "Pasteur → Dago",
-    start: [107.5940, -6.8930],
-    end: [107.6170, -6.8850],
-    color: "#10b981",
-    startOffset: 0.2,
-    status: "active",
-    temperature: 5.1,
-    driverIdTag: "DRV-002",
-    engineHours: 980,
-    odometer: 65210,
-    geofenceZone: "Pasteur District",
-    driverBehavior: { safetyScore: 74, speedingEvents: 5, harshBraking: 3, sharpTurns: 4 },
-    deliveryStatus: "Delivering — Stop 2/4",
-    lastAlert: "Speeding: 85 km/h",
-    fuelConsumption: 22.1,
-  },
-  {
-    id: "truck-3",
-    name: "Dump Truck #03",
-    driver: "Cahya Pratama",
-    plate: "D 9012 GHI",
-    carType: "Hino 500 Dump",
-    fuelCapacity: 300,
-    initialFuel: 246,
-    fuelPercent: 82,
-    speed: 35,
-    routeLabel: "Cihampelas → Setiabudi",
-    start: [107.6030, -6.8940],
-    end: [107.6170, -6.8730],
-    color: "#f59e0b",
-    startOffset: 0.4,
-    status: "active",
-    temperature: 3.8,
-    driverIdTag: "DRV-003",
-    engineHours: 1580,
-    odometer: 112850,
-    geofenceZone: "North Bandung",
-    driverBehavior: { safetyScore: 88, speedingEvents: 2, harshBraking: 1, sharpTurns: 1 },
-    deliveryStatus: "Loading",
-    lastAlert: "Temp warning: 8.1°C",
-    fuelConsumption: 19.8,
-  },
-  {
-    id: "truck-4",
-    name: "Dump Truck #04",
-    driver: "Deni Firmansyah",
-    plate: "D 3456 JKL",
-    carType: "Volvo FMX",
-    fuelCapacity: 400,
-    initialFuel: 124,
-    fuelPercent: 31,
-    speed: 40,
-    routeLabel: "Buah Batu → Kopo",
-    start: [107.6340, -6.9400],
-    end: [107.5890, -6.9370],
-    color: "#ef4444",
-    startOffset: 0.6,
-    status: "active",
-    temperature: 6.5,
-    driverIdTag: "DRV-004",
-    engineHours: 2100,
-    odometer: 142300,
-    geofenceZone: "South Bandung",
-    driverBehavior: { safetyScore: 65, speedingEvents: 8, harshBraking: 5, sharpTurns: 6 },
-    deliveryStatus: "In Transit — ETA 25 min",
-    lastAlert: "Fuel anomaly: -15L",
-    fuelConsumption: 25.3,
-  },
-  {
-    id: "truck-5",
-    name: "Dump Truck #05",
-    driver: "Eko Wibowo",
-    plate: "D 7890 MNO",
-    carType: "Mitsubishi Fuso",
-    fuelCapacity: 250,
-    initialFuel: 137,
-    fuelPercent: 55,
-    speed: 0,
-    routeLabel: "Bandung Station → Braga",
-    start: [107.6030, -6.9125],
-    end: [107.6095, -6.9190],
-    color: "#8b5cf6",
-    startOffset: 0.8,
-    status: "idle",
-    temperature: 5.0,
-    driverIdTag: "DRV-005",
-    engineHours: 760,
-    odometer: 45600,
-    geofenceZone: "Station Area",
-    driverBehavior: { safetyScore: 95, speedingEvents: 0, harshBraking: 0, sharpTurns: 1 },
-    deliveryStatus: "Completed",
-    lastAlert: "Delivery completed",
-    fuelConsumption: 16.2,
-  },
-];
-
-// Geofence zones
-interface GeofenceZone {
-  id: string;
-  name: string;
-  type: "depot" | "delivery" | "restricted";
-  center: [number, number];
-  radiusKm: number;
-  color: string;
-}
-
-const GEOFENCES: GeofenceZone[] = [
-  {
-    id: "gf-depot",
-    name: "Depot Utama",
-    type: "depot",
-    center: [107.6030, -6.9125],
-    radiusKm: 0.4,
-    color: "#6366f1",
-  },
-  {
-    id: "gf-delivery-1",
-    name: "Zona Pengiriman Alun-Alun",
-    type: "delivery",
-    center: [107.6098, -6.9218],
-    radiusKm: 0.35,
-    color: "#10b981",
-  },
-  {
-    id: "gf-restricted",
-    name: "Zona Terbatas",
-    type: "restricted",
-    center: [107.6200, -6.9050],
-    radiusKm: 0.3,
-    color: "#ef4444",
-  },
-];
-
-// Generate circle polygon from center + radius
-function createCircleGeoJSON(
-  center: [number, number],
-  radiusKm: number,
-  points = 64
-): GeoJSON.Feature {
-  const coords: [number, number][] = [];
-  const distanceX =
-    radiusKm / (111.32 * Math.cos((center[1] * Math.PI) / 180));
-  const distanceY = radiusKm / 110.574;
-  for (let i = 0; i < points; i++) {
-    const theta = (i / points) * (2 * Math.PI);
-    const x = distanceX * Math.cos(theta);
-    const y = distanceY * Math.sin(theta);
-    coords.push([center[0] + x, center[1] + y]);
-  }
-  coords.push(coords[0]);
-  return {
-    type: "Feature",
-    properties: {},
-    geometry: { type: "Polygon", coordinates: [coords] },
-  };
-}
-
-// Follow cam settings
-const FOLLOW_ZOOM = 19;
-const FOLLOW_PITCH = 70;
-const FOLLOW_BEARING_OFFSET = 30;
+const FOLLOW_ZOOM = 17.2;
+const FOLLOW_PITCH = 60;
 const LERP_FACTOR = 0.08;
-const SPEED = 0.0001;
+const SNAPSHOT_MS = 300;
+const SPEEDS = [10, 30, 60] as const;
 
-// Per-truck runtime state
+const STOP_COLORS = { terlayani: "#00a854", terlewat: "#e60000", tak_terverifikasi: "#ff8c00", menunggu: "#ffffff" } as const;
+const STOP_LABEL = { terlayani: "SERVED", terlewat: "NOT SERVED", tak_terverifikasi: "UNVERIFIED", menunggu: "WAITING" } as const;
+
+export const FUEL_LABEL = { wajar: "Wajar", perlu_cek: "Perlu Cek", anomali: "Anomali" } as const;
+const FUEL_CHIP = { wajar: "chipOk", perlu_cek: "chipWarn", anomali: "chipBad" } as const;
+
 interface TruckRuntime {
-  route: RoutePoint[];
-  progress: number;
   setPosition: (lng: number, lat: number) => void;
   setBearing: (bearing: number) => void;
 }
 
-const STATUS_CONFIGS: Record<string, { label: string; color: string; icon: string }> = {
-  active: { label: "Active", color: "#22c55e", icon: "•" },
-  idle: { label: "Idle", color: "#f59e0b", icon: "•" },
-  stopped: { label: "Stopped", color: "#ef4444", icon: "•" },
-  maintenance: { label: "Maintenance", color: "#0ea5e9", icon: "•" },
-};
+type Tab = "ringkasan" | "bbm" | "rute" | "peringatan";
 
-export default function Map() {
+interface MapProps {
+  onSnapshot?: (s: FleetSnapshot) => void;
+  /** Permintaan fokus dari luar (mis. klik peringatan). */
+  focusRequest?: { vehicleId: string; nonce: number } | null;
+}
+
+function emptyFC(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
+export default function Map({ onSnapshot, focusRequest }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<maplibregl.Map | null>(null);
   const animFrameRef = useRef<number>(0);
+  const lastFrameRef = useRef<number | null>(null);
+  const lastSnapshotRef = useRef(0);
+
+  const tripsRef = useRef<Trip[]>([]);
+  const runtimeRef = useRef<Record<string, TruckRuntime>>({});
+  const simTRef = useRef(0);
+  const speedRef = useRef<number>(SPEEDS[1]);
+
   const [isLoaded, setIsLoaded] = useState(false);
+  const [tripsReady, setTripsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
-  const [routeLoaded, setRouteLoaded] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const isFollowingRef = useRef(false);
-  const [followTruckId, setFollowTruckId] = useState<string | null>(null);
-  const followTruckIdRef = useRef<string | null>(null);
+  const [speed, setSpeed] = useState<number>(SPEEDS[1]);
+  const [snapshot, setSnapshot] = useState<FleetSnapshot | null>(null);
+
+  const [followId, setFollowId] = useState<string | null>(null);
+  const followIdRef = useRef<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelOpenRef = useRef(false);
+  const [activeTab, setActiveTab] = useState<Tab>("ringkasan");
   const camCenter = useRef<[number, number] | null>(null);
   const camBearing = useRef(0);
-  const [activeTab, setActiveTab] = useState<"overview" | "monitoring" | "alerts">("overview");
-  
-  const [realtimeStats, setRealtimeStats] = useState({ distance: 0, fuel: 0, fuelPct: 0 });
-  const lastUpdateRef = useRef(0);
 
-  // All trucks runtime data
-  const trucksRuntime = useRef<Record<string, TruckRuntime>>({});
-  const loadedCount = useRef(0);
+  const onSnapshotRef = useRef(onSnapshot);
+  onSnapshotRef.current = onSnapshot;
 
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-  const animate = useCallback(() => {
+  // ─── Sinkronisasi analitik → peta & UI ───
+  const publishSnapshot = useCallback(() => {
     const map = mapInstance.current;
-    if (!map) return;
-    if (!isPlayingRef.current) return;
+    const trips = tripsRef.current;
+    if (!map || trips.length === 0) return;
+    const snap = computeSnapshot(trips, simTRef.current);
 
-    const runtime = trucksRuntime.current;
-    let followPos: { lng: number; lat: number } | null = null;
-    let followBearing = 0;
-
-    // Update all trucks
-    for (const truck of TRUCKS) {
-      const rt = runtime[truck.id];
-      if (!rt || rt.route.length < 2) continue;
-
-      rt.progress += SPEED;
-      if (rt.progress >= 1) rt.progress = 0;
-
-      const { position, bearing, traveledMeters, segmentIndex } = interpolateRoute(rt.route, rt.progress);
-      
-      // Update mapped route to only show the path that has been passed
-      const passedRoute = rt.route.slice(0, segmentIndex + 1).map(p => [p.lng, p.lat]);
-      passedRoute.push([position.lng, position.lat]);
-      const source = map.getSource(`route-${truck.id}`) as maplibregl.GeoJSONSource;
-      if (source) {
-        source.setData({
+    const stopFeatures: GeoJSON.Feature[] = [];
+    const devFeatures: GeoJSON.Feature[] = [];
+    for (const { trip, state } of snap.items) {
+      const pool = trip.stops.find((s) => !s.validated);
+      if (pool) {
+        stopFeatures.push({
           type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: passedRoute }
+          properties: { name: pool.name, status: "pool", color: "#111111", vehicle: trip.vehicle.code },
+          geometry: { type: "Point", coordinates: [pool.lng, pool.lat] },
         });
       }
-
-      rt.setPosition(position.lng, position.lat);
-      rt.setBearing(bearing);
-
-      // Track the followed truck
-      if (followTruckIdRef.current === truck.id) {
-        followPos = position;
-        followBearing = bearing;
-
-        const now = performance.now();
-        if (now - lastUpdateRef.current > 200) {
-          const fuelConsumed = traveledMeters * (truck.fuelConsumption / 100000);
-          const fuel = Math.max(0, truck.initialFuel - fuelConsumed);
-          const fuelPct = Math.max(0, (fuel / truck.fuelCapacity) * 100);
-          setRealtimeStats({ distance: traveledMeters / 1000, fuel, fuelPct });
-          lastUpdateRef.current = now;
-        }
+      state.validatedStops.forEach((s, i) => {
+        stopFeatures.push({
+          type: "Feature",
+          properties: {
+            name: s.name,
+            status: state.statuses[i],
+            color: STOP_COLORS[state.statuses[i]],
+            vehicle: trip.vehicle.code,
+          },
+          geometry: { type: "Point", coordinates: [s.lng, s.lat] },
+        });
+      });
+      const pings = trip.pings;
+      for (const d of state.deviations) {
+        devFeatures.push({
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: pings.slice(d.startIndex, d.endIndex + 1).map((p) => [p.lng, p.lat]),
+          },
+        });
       }
     }
+    (map.getSource("stops") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: stopFeatures,
+    });
+    (map.getSource("deviations") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: devFeatures,
+    });
 
+    setSnapshot(snap);
+    onSnapshotRef.current?.(snap);
+    if (typeof window !== "undefined") (window as unknown as { __fleet: FleetSnapshot }).__fleet = snap;
+    return snap;
+  }, []);
+
+  const renderFrame = useCallback(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+    let followPos: { lng: number; lat: number } | null = null;
+    let followBearing = 0;
+    const vehicleFeatures: GeoJSON.Feature[] = [];
+
+    for (const trip of tripsRef.current) {
+      const rt = runtimeRef.current[trip.vehicle.id];
+      if (!rt) continue;
+      const tt = trip.startT + simTRef.current;
+      const m = motionAt(trip, tt);
+      rt.setPosition(m.position.lng, m.position.lat);
+      rt.setBearing(m.bearing);
+      vehicleFeatures.push({
+        type: "Feature",
+        properties: { code: trip.vehicle.code, color: trip.vehicle.color },
+        geometry: { type: "Point", coordinates: [m.position.lng, m.position.lat] },
+      });
+      (map.getSource(`route-${trip.vehicle.id}`) as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: traveledPath(trip, tt) },
+      });
+      if (followIdRef.current === trip.vehicle.id) {
+        followPos = m.position;
+        followBearing = m.bearing;
+      }
+    }
+    (map.getSource("vehicles") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: vehicleFeatures,
+    });
     map.triggerRepaint();
 
-    // Follow camera
-    if (isFollowingRef.current && followPos) {
-      const targetCenter: [number, number] = [followPos.lng, followPos.lat];
-      const targetBearing = followBearing + FOLLOW_BEARING_OFFSET;
-
+    if (followPos) {
+      const target: [number, number] = [followPos.lng, followPos.lat];
       if (!camCenter.current) {
-        camCenter.current = targetCenter;
-        camBearing.current = targetBearing;
+        camCenter.current = target;
+        camBearing.current = followBearing;
       }
-
       camCenter.current = [
-        lerp(camCenter.current[0], targetCenter[0], LERP_FACTOR),
-        lerp(camCenter.current[1], targetCenter[1], LERP_FACTOR),
+        camCenter.current[0] + (target[0] - camCenter.current[0]) * LERP_FACTOR,
+        camCenter.current[1] + (target[1] - camCenter.current[1]) * LERP_FACTOR,
       ];
-
-      let bd = targetBearing - camBearing.current;
+      let bd = followBearing - camBearing.current;
       if (bd > 180) bd -= 360;
       if (bd < -180) bd += 360;
-      camBearing.current += bd * LERP_FACTOR;
-
-      const rightPadding = panelOpenRef.current ? 340 : 0;
-
+      camBearing.current += bd * LERP_FACTOR * 0.5;
       map.jumpTo({
         center: camCenter.current,
         bearing: camBearing.current,
         zoom: FOLLOW_ZOOM,
         pitch: FOLLOW_PITCH,
-        padding: { top: 0, bottom: 0, left: 0, right: rightPadding },
+        padding: { top: 0, bottom: 0, left: 0, right: panelOpenRef.current ? 400 : 0 },
       });
     }
-
-    animFrameRef.current = requestAnimationFrame(animate);
   }, []);
 
-  useEffect(() => {
-    isFollowingRef.current = isFollowing;
-    if (!isFollowing) {
-      camCenter.current = null;
-      setPanelOpen(false);
-      setFollowTruckId(null);
-      setActiveTab("overview");
-    }
-  }, [isFollowing]);
+  const animate = useCallback(
+    (now: number) => {
+      if (!isPlayingRef.current) return;
+      const last = lastFrameRef.current ?? now;
+      const dt = Math.min(0.1, (now - last) / 1000);
+      lastFrameRef.current = now;
+      simTRef.current += dt * speedRef.current;
 
-  useEffect(() => {
-    followTruckIdRef.current = followTruckId;
-  }, [followTruckId]);
+      renderFrame();
 
-  useEffect(() => {
-    panelOpenRef.current = panelOpen;
-  }, [panelOpen]);
+      if (now - lastSnapshotRef.current > SNAPSHOT_MS) {
+        lastSnapshotRef.current = now;
+        const snap = publishSnapshot();
+        if (snap && snap.items.every((i) => i.state.done)) {
+          setIsPlaying(false);
+          return;
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(animate);
+    },
+    [publishSnapshot, renderFrame]
+  );
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
-    if (isPlaying && routeLoaded) {
+    if (isPlaying && tripsReady) {
+      lastFrameRef.current = null;
       animFrameRef.current = requestAnimationFrame(animate);
     } else {
       cancelAnimationFrame(animFrameRef.current);
     }
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [isPlaying, routeLoaded, animate]);
+  }, [isPlaying, tripsReady, animate]);
+
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
+  useEffect(() => {
+    followIdRef.current = followId;
+    camCenter.current = null;
+    if (!followId) setPanelOpen(false);
+    // Saat simulasi dijeda, kamera tetap harus pindah ke kendaraan terpilih.
+    else if (!isPlayingRef.current) requestAnimationFrame(() => renderFrame());
+  }, [followId, renderFrame]);
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+    document.body.classList.toggle("panel-open", panelOpen && !!followId);
+  }, [panelOpen, followId]);
+
+  const fitAll = useCallback(() => {
+    const map = mapInstance.current;
+    if (!map || tripsRef.current.length === 0) return;
+    const bounds = new maplibregl.LngLatBounds();
+    for (const t of tripsRef.current) for (const p of t.plannedLine) bounds.extend([p.lng, p.lat]);
+    map.fitBounds(bounds, { padding: { top: 140, bottom: 130, left: 420, right: 60 }, pitch: 45, bearing: -10, duration: 900 });
+  }, []);
+
+  const follow = useCallback((vehicleId: string) => {
+    setFollowId(vehicleId);
+    setPanelOpen(true);
+    setActiveTab("ringkasan");
+  }, []);
+  const followRef = useRef(follow);
+  followRef.current = follow;
+
+  const stopFollow = useCallback(() => {
+    setFollowId(null);
+    fitAll();
+  }, [fitAll]);
+
+  useEffect(() => {
+    if (focusRequest && tripsReady) follow(focusRequest.vehicleId);
+  }, [focusRequest, tripsReady, follow]);
 
   useEffect(() => {
     const map = mapInstance.current;
     if (!map) return;
-    const handleDragStart = () => {
-      if (isFollowingRef.current) setIsFollowing(false);
+    const onDrag = () => {
+      if (followIdRef.current) setFollowId(null);
     };
-    map.on("dragstart", handleDragStart);
-    return () => { map.off("dragstart", handleDragStart); };
+    map.on("dragstart", onDrag);
+    return () => {
+      map.off("dragstart", onDrag);
+    };
   }, [isLoaded]);
 
-  const enterFollowMode = useCallback((truckId: string) => {
-    setFollowTruckId(truckId);
-    setIsFollowing(true);
+  const restart = useCallback(() => {
+    simTRef.current = 0;
+    renderFrame();
+    publishSnapshot();
     setIsPlaying(true);
-    camCenter.current = null;
-  }, []);
+  }, [publishSnapshot, renderFrame]);
 
-  const enterFollowModeRef = useRef(enterFollowMode);
-  enterFollowModeRef.current = enterFollowMode;
-
+  // ─── Inisialisasi peta ───
   useEffect(() => {
     if (!mapContainer.current || mapInstance.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: "https://tiles.openfreemap.org/styles/liberty",
-      center: [107.6100, -6.9100],
-      zoom: 14,
-      pitch: 55,
-      bearing: -17.6,
+      center: [107.615, -6.912],
+      zoom: 13.6,
+      pitch: 45,
+      bearing: -10,
       maxPitch: 85,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
+    mapInstance.current = map;
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-right");
-    map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
-    map.addControl(new maplibregl.ScaleControl({ maxWidth: 200 }), "bottom-left");
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 160 }), "bottom-right");
 
     map.on("style.load", () => {
-      const layers = map.getStyle().layers;
-      if (!layers) return;
-
-      let labelLayerId: string | undefined;
-      for (const layer of layers) {
-        if (layer.type === "symbol" && (layer.layout as Record<string, unknown>)?.["text-field"]) {
-          labelLayerId = layer.id;
-          break;
+      const layers = map.getStyle().layers ?? [];
+      const labelLayerId = layers.find(
+        (l) => l.type === "symbol" && (l.layout as Record<string, unknown>)?.["text-field"]
+      )?.id;
+      const sources = map.getStyle().sources;
+      const src = Object.keys(sources).find((k) => ["openmaptiles", "protomaps", "maptiler"].includes(k));
+      if (!src) return;
+      for (const bl of layers.filter((l) => l.id.includes("building") && l.type === "fill")) {
+        try {
+          map.removeLayer(bl.id);
+        } catch {
+          /* abaikan */
         }
       }
-
-      const sources = map.getStyle().sources;
-      const hasBuildings = Object.keys(sources).some(
-        (key) => key === "openmaptiles" || key === "protomaps" || key === "maptiler"
-      );
-
-      if (hasBuildings) {
-        const existingBuildingLayers = layers.filter((l) => l.id.includes("building") && l.type === "fill");
-        for (const bl of existingBuildingLayers) {
-          try { map.removeLayer(bl.id); } catch { /* ignore */ }
-        }
-
-        const sourceName = Object.keys(sources).find(
-          (key) => key === "openmaptiles" || key === "protomaps" || key === "maptiler"
-        ) || "openmaptiles";
-
-        map.addLayer({
+      map.addLayer(
+        {
           id: "3d-buildings",
-          source: sourceName,
+          source: src,
           "source-layer": "building",
           type: "fill-extrusion",
           minzoom: 13,
           paint: {
-            "fill-extrusion-color": [
-              "interpolate", ["linear"], ["get", "render_height"],
-              0, "#e8e4df", 10, "#d9d5cf", 25, "#cec9c2",
-              50, "#c4bfb8", 100, "#b8b3ab", 150, "#aca7a0",
-            ],
-            "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 13, 0, 15.05, ["get", "render_height"]],
-            "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 13, 0, 15.05, ["get", "render_min_height"]],
-            "fill-extrusion-opacity": 0.95,
+            "fill-extrusion-color": "#dcd8d2",
+            "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 13, 0, 15.05, ["coalesce", ["get", "render_height"], 0]],
+            "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 13, 0, 15.05, ["coalesce", ["get", "render_min_height"], 0]],
+            "fill-extrusion-opacity": 0.85,
           },
-        }, labelLayerId);
-      }
+        },
+        labelLayerId
+      );
     });
 
-    map.on("load", () => {
+    map.on("load", async () => {
       setIsLoaded(true);
+      const trips = await loadTrips();
+      tripsRef.current = trips;
 
-      // Add geofence zones
-      for (const gf of GEOFENCES) {
-        const circleGeoJSON = createCircleGeoJSON(gf.center, gf.radiusKm);
-        map.addSource(`geofence-${gf.id}`, {
-          type: "geojson",
-          data: circleGeoJSON as GeoJSON.Feature,
-        });
-
-        map.addLayer({
-          id: `geofence-fill-${gf.id}`,
-          type: "fill",
-          source: `geofence-${gf.id}`,
-          paint: {
-            "fill-color": gf.color,
-            "fill-opacity": 0.1,
-          },
-        });
-
-        map.addLayer({
-          id: `geofence-border-${gf.id}`,
-          type: "line",
-          source: `geofence-${gf.id}`,
-          paint: {
-            "line-color": gf.color,
-            "line-width": 2,
-            "line-opacity": 0.5,
-            "line-dasharray": [4, 4],
-          },
-        });
-
-        // Geofence label
-        map.addSource(`geofence-label-${gf.id}`, {
+      for (const trip of trips) {
+        const id = trip.vehicle.id;
+        map.addSource(`planned-${id}`, {
           type: "geojson",
           data: {
             type: "Feature",
-            properties: { name: gf.name, type: gf.type },
-            geometry: { type: "Point", coordinates: gf.center },
-          } as GeoJSON.Feature,
+            properties: {},
+            geometry: { type: "LineString", coordinates: trip.plannedLine.map((p) => [p.lng, p.lat]) },
+          },
         });
-
         map.addLayer({
-          id: `geofence-label-${gf.id}`,
-          type: "symbol",
-          source: `geofence-label-${gf.id}`,
-          layout: {
-            "text-field": ["get", "name"],
-            "text-size": 11,
-            "text-anchor": "center",
-            "text-allow-overlap": true,
-          },
-          paint: {
-            "text-color": gf.color,
-            "text-halo-color": "rgba(0,0,0,0.7)",
-            "text-halo-width": 1.5,
-          },
+          id: `planned-${id}`,
+          type: "line",
+          source: `planned-${id}`,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": trip.vehicle.color, "line-width": 4, "line-opacity": 0.35, "line-dasharray": [1.5, 1.5] },
         });
       }
 
-      // Load all truck routes in parallel
-      const routePromises = TRUCKS.map(async (truck) => {
-        const route = await fetchRoute(truck.start, truck.end);
-        return { truck, route };
+      map.addSource("deviations", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "deviations",
+        type: "line",
+        source: "deviations",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": "#e60000", "line-width": 9, "line-opacity": 0.45 },
       });
 
-      Promise.all(routePromises)
-        .then((results) => {
-          for (const { truck, route } of results) {
-            // Add route line (initially empty or at start, drawn dynamically in animate)
-            map.addSource(`route-${truck.id}`, {
-              type: "geojson",
-              data: routeToGeoJSON([route[0], route[0]]) as GeoJSON.Feature,
-            });
+      for (const trip of trips) {
+        const id = trip.vehicle.id;
+        map.addSource(`route-${id}`, { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } } });
+        map.addLayer({
+          id: `route-${id}`,
+          type: "line",
+          source: `route-${id}`,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": trip.vehicle.color, "line-width": 4, "line-opacity": 0.95 },
+        });
+      }
 
-            map.addLayer({
-              id: `route-glow-${truck.id}`,
-              type: "line",
-              source: `route-${truck.id}`,
-              layout: { "line-join": "round", "line-cap": "round" },
-              paint: {
-                "line-color": truck.color,
-                "line-width": 8,
-                "line-opacity": 0.2,
-                "line-blur": 5,
-              },
-            });
+      map.addSource("stops", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "stops-circle",
+        type: "circle",
+        source: "stops",
+        paint: {
+          "circle-radius": ["case", ["==", ["get", "status"], "pool"], 6, 8],
+          "circle-color": ["get", "color"],
+          "circle-stroke-color": "#111111",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.addLayer({
+        id: "stops-label",
+        type: "symbol",
+        source: "stops",
+        minzoom: 13.5,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-size": 11,
+          "text-offset": [0, 1.3],
+          "text-anchor": "top",
+          "text-font": ["Noto Sans Bold"],
+        },
+        paint: { "text-color": "#111111", "text-halo-color": "#ffffff", "text-halo-width": 1.6 },
+      });
+      map.on("click", "stops-circle", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, string>;
+        const label = p.status === "pool" ? "Pool / titik berangkat" : `Status: ${p.status.replace("_", " ").toUpperCase()}`;
+        new maplibregl.Popup({ offset: 10 })
+          .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+          .setHTML(`<strong>${p.name}</strong><br/>${p.vehicle} · ${label}`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "stops-circle", () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", "stops-circle", () => (map.getCanvas().style.cursor = ""));
 
-            map.addLayer({
-              id: `route-line-${truck.id}`,
-              type: "line",
-              source: `route-${truck.id}`,
-              layout: { "line-join": "round", "line-cap": "round" },
-              paint: {
-                "line-color": truck.color,
-                "line-width": 3,
-                "line-opacity": 0.8,
-              },
-            });
+      map.addSource("vehicles", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "vehicles",
+        type: "circle",
+        source: "vehicles",
+        maxzoom: 16,
+        paint: {
+          "circle-radius": 9,
+          "circle-color": ["get", "color"],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 3,
+        },
+      });
+      map.addLayer({
+        id: "vehicles-label",
+        type: "symbol",
+        source: "vehicles",
+        maxzoom: 16,
+        layout: {
+          "text-field": ["get", "code"],
+          "text-size": 11,
+          "text-offset": [0, -1.5],
+          "text-anchor": "bottom",
+          "text-font": ["Noto Sans Bold"],
+          "text-allow-overlap": true,
+        },
+        paint: { "text-color": ["get", "color"], "text-halo-color": "#ffffff", "text-halo-width": 2 },
+      });
 
-            // Start Marker over location
-            new maplibregl.Marker({ color: "#22c55e", scale: 0.7 })
-              .setLngLat(truck.start)
-              .setPopup(new maplibregl.Popup().setHTML(
-                `<strong>${truck.name}</strong><br/>Start — ${truck.routeLabel.split("→")[0].trim()}`
-              ))
-              .addTo(map);
+      for (const trip of trips) {
+        const start = trip.path[0];
+        const { layer, setPosition, setBearing } = createModelLayer(
+          `model-${trip.vehicle.id}`,
+          "/dump_truck.glb",
+          start.lng,
+          start.lat,
+          3.0
+        );
+        runtimeRef.current[trip.vehicle.id] = { setPosition, setBearing };
+        map.addLayer(layer);
+      }
 
-            // 3D model layer
-            const { layer, setPosition, setBearing } = createModelLayer(
-              `model-${truck.id}`,
-              "/dump_truck.glb",
-              route[0].lng,
-              route[0].lat,
-              3.0
-            );
-
-            trucksRuntime.current[truck.id] = {
-              route,
-              progress: truck.startOffset,
-              setPosition,
-              setBearing,
-            };
-
-            map.addLayer(layer);
+      map.on("click", (e) => {
+        let closest: string | null = null;
+        let best = 40;
+        for (const trip of tripsRef.current) {
+          const { position } = motionAt(trip, trip.startT + simTRef.current);
+          const s = map.project([position.lng, position.lat]);
+          const d = Math.hypot(s.x - e.point.x, s.y - e.point.y);
+          if (d < best) {
+            best = d;
+            closest = trip.vehicle.id;
           }
+        }
+        if (closest) followRef.current(closest);
+      });
 
-          // Click detection for all trucks
-          map.on("click", (e) => {
-            let closestId: string | null = null;
-            let closestDist = Infinity;
-
-            for (const truck of TRUCKS) {
-              const rt = trucksRuntime.current[truck.id];
-              if (!rt || rt.route.length < 2) continue;
-              const { position } = interpolateRoute(rt.route, rt.progress);
-              const screen = map.project([position.lng, position.lat]);
-              const dist = Math.sqrt(
-                (screen.x - e.point.x) ** 2 + (screen.y - e.point.y) ** 2
-              );
-              if (dist < 50 && dist < closestDist) {
-                closestDist = dist;
-                closestId = truck.id;
-              }
-            }
-
-            if (closestId) {
-              enterFollowModeRef.current(closestId);
-            }
-          });
-
-          setRouteLoaded(true);
-          setIsPlaying(true);
-        })
-        .catch((err) => console.error("Route fetch error:", err));
+      renderFrame();
+      publishSnapshot();
+      fitAll();
+      setTripsReady(true);
+      setIsPlaying(true);
     });
-
-    mapInstance.current = map;
 
     return () => {
       map.remove();
       mapInstance.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const followedTruck = TRUCKS.find((t) => t.id === followTruckId) || null;
-
-  // Safety score color
-  const getSafetyColor = (score: number) => {
-    if (score >= 85) return "#22c55e";
-    if (score >= 70) return "#f59e0b";
-    return "#ef4444";
-  };
-
-  // Mini fuel bar chart data
-  const fuelChartData = [65, 72, 68, 58, 62, 55, followedTruck?.fuelPercent ?? 50];
-  const fuelChartDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-  // Truck-specific alerts
-  const truckAlerts = [
-    { type: "warning", text: "Speeding: 85 km/h in 60 zone", time: "5m" },
-    { type: "success", text: "Geofence entered: Delivery zone", time: "12m" },
-    { type: "info", text: "Driver ID authenticated", time: "18m" },
-    { type: "danger", text: "Harsh braking detected", time: "25m" },
-  ];
+  const followed = snapshot?.items.find((i) => i.trip.vehicle.id === followId) ?? null;
+  const allDone = !!snapshot && snapshot.items.every((i) => i.state.done);
 
   return (
     <div className="mapWrapper">
       <div ref={mapContainer} className="mapContainer" />
 
-      {isFollowing && followedTruck && (
-        <div className="followBadge" style={{ background: `${followedTruck.color}dd` }}>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-          </svg>
-          <span className="followBadgeStatus" style={{ background: STATUS_CONFIGS[followedTruck.status].color }}>{STATUS_CONFIGS[followedTruck.status].icon}</span>
-          <span>{followedTruck.name}</span>
-          <button className="followExitBtn" onClick={() => setIsFollowing(false)}>X</button>
+      {/* Jam simulasi & kontrol */}
+      {tripsReady && snapshot && (
+        <div className="simBar">
+          <div className="simClock">
+            <span className="simClockLabel">Simulasi</span>
+            <span className="simClockValue">{snapshot.clock}</span>
+          </div>
+          <button className="simBtn simBtnPrimary" onClick={() => (allDone ? restart() : setIsPlaying((p) => !p))}>
+            {allDone ? "Ulangi" : isPlaying ? "Jeda" : "Lanjut"}
+          </button>
+          {SPEEDS.map((s) => (
+            <button key={s} className={`simBtn ${speed === s ? "active" : ""}`} onClick={() => setSpeed(s)}>
+              {s}×
+            </button>
+          ))}
+          <button className="simBtn" onClick={stopFollow}>
+            Semua
+          </button>
         </div>
       )}
 
-      {/* Enhanced Side panel in follow mode */}
-      {isFollowing && followedTruck && (
+      {/* Legenda */}
+      {tripsReady && !(followId && panelOpen) && (
+        <div className="mapLegend">
+          <span><i className="lgLine dashed" /> Rute standar</span>
+          <span><i className="lgLine" /> Lintasan GPS</span>
+          <span><i className="lgLine dev" /> Keluar rute</span>
+          <span><i className="lgDot" style={{ background: STOP_COLORS.terlayani }} /> SERVED</span>
+          <span><i className="lgDot" style={{ background: STOP_COLORS.terlewat }} /> NOT SERVED</span>
+          <span><i className="lgDot" style={{ background: STOP_COLORS.tak_terverifikasi }} /> UNVERIFIED</span>
+          <span><i className="lgDot" style={{ background: STOP_COLORS.menunggu }} /> WAITING</span>
+        </div>
+      )}
+
+      {/* Daftar armada */}
+      {snapshot && !followId && (
+        <div className="truckList">
+          <h4 className="truckListTitle">
+            Armada aktif ({snapshot.items.length}) <span className="truckListHint">klik untuk detail</span>
+          </h4>
+          {snapshot.items.map(({ trip, state }) => (
+            <TruckRow key={trip.vehicle.id} trip={trip} state={state} onClick={() => follow(trip.vehicle.id)} />
+          ))}
+        </div>
+      )}
+
+      {/* Panel detail kendaraan */}
+      {followed && (
         <>
-          <button
-            className={`panelToggle ${panelOpen ? "open" : ""}`}
-            onClick={() => setPanelOpen((p) => !p)}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="white">
+          <div className="followBadge" style={{ background: followed.trip.vehicle.color }}>
+            <span>
+              {followed.trip.vehicle.code} · {followed.trip.vehicle.plate}
+            </span>
+            <button className="followExitBtn" onClick={stopFollow} aria-label="Keluar mode ikuti">
+              ✕
+            </button>
+          </div>
+          <button className={`panelToggle ${panelOpen ? "open" : ""}`} onClick={() => setPanelOpen((p) => !p)} aria-label="Panel">
+            <svg viewBox="0 0 24 24" width="16" height="16">
               <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" />
             </svg>
           </button>
           <div className={`sidePanel ${panelOpen ? "open" : ""}`}>
             <div className="panelHeader">
-              <h3>{followedTruck.name}</h3>
-              <div className="panelStatusBadge" style={{ background: STATUS_CONFIGS[followedTruck.status].color }}>
-                {STATUS_CONFIGS[followedTruck.status].label}
+              <div>
+                <h3>{followed.trip.vehicle.code}</h3>
+                <span className="panelSub">
+                  {followed.trip.vehicle.plate} · {followed.trip.vehicle.upt}
+                </span>
               </div>
+              <span className={`chip ${followed.state.done ? "chipMuted" : followed.state.speedKmh > 0 ? "chipOk" : "chipWarn"}`}>
+                {followed.state.done ? "Selesai" : followed.state.speedKmh > 0 ? "Berjalan" : "Di TPS"}
+              </span>
             </div>
-
-            {/* Tabs */}
             <div className="panelTabs">
-              {(["overview", "monitoring", "alerts"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  className={`panelTab ${activeTab === tab ? "active" : ""}`}
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab === "overview" && "OVERVIEW"}
-                  {tab === "monitoring" && "MONITORING"}
-                  {tab === "alerts" && "ALERTS"}
+              {(
+                [
+                  ["ringkasan", "Ringkasan"],
+                  ["bbm", "BBM"],
+                  ["rute", "Rute & TPS"],
+                  ["peringatan", "Peringatan"],
+                ] as const
+              ).map(([key, label]) => (
+                <button key={key} className={`panelTab ${activeTab === key ? "active" : ""}`} onClick={() => setActiveTab(key)}>
+                  {label}
                 </button>
               ))}
             </div>
-
             <div className="panelBody">
-              {/* OVERVIEW TAB */}
-              {activeTab === "overview" && (
-                <>
-                  <div className="panelSection">
-                    <span className="panelLabel">Route Path</span>
-                    <span className="panelValue">{followedTruck.routeLabel}</span>
-                  </div>
-                  <div className="panelSection">
-                    <span className="panelLabel">Delivery Status</span>
-                    <span className="panelValue deliveryStatus">{followedTruck.deliveryStatus}</span>
-                  </div>
-                  <div className="panelDivider" />
-                  <div className="panelSection">
-                    <span className="panelLabel">Vehicle Type</span>
-                    <span className="panelValue">{followedTruck.carType}</span>
-                  </div>
-                  <div className="panelGrid" style={{ marginBottom: "1rem" }}>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Distance Traveled</span>
-                      <span className="panelValue">{realtimeStats.distance.toFixed(2)} km</span>
-                    </div>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Speed</span>
-                      <span className="panelValue">{followedTruck.speed} km/h</span>
-                    </div>
-                  </div>
-                  <div className="panelSection">
-                    <span className="panelLabel">Live Fuel Level</span>
-                    <div className="fuelBar">
+              {activeTab === "ringkasan" && <SummaryTab trip={followed.trip} state={followed.state} />}
+              {activeTab === "bbm" && <FuelTab trip={followed.trip} state={followed.state} />}
+              {activeTab === "rute" && <RouteTab trip={followed.trip} state={followed.state} />}
+              {activeTab === "peringatan" && (
+                <div className="truckAlertsList">
+                  {snapshot!.alerts.filter((a) => a.vehicleId === followed.trip.vehicle.id).length === 0 && (
+                    <p className="muted">Tidak ada peringatan untuk kendaraan ini.</p>
+                  )}
+                  {snapshot!.alerts
+                    .filter((a) => a.vehicleId === followed.trip.vehicle.id)
+                    .map((a) => (
                       <div
-                        className="fuelFill"
-                        style={{
-                          width: `${realtimeStats.fuelPct}%`,
-                          background: realtimeStats.fuelPct < 20
-                            ? "var(--danger)"
-                            : "var(--accent)",
-                        }}
-                      />
-                    </div>
-                    <span className="panelValue" style={{ marginTop: 4 }}>
-                      {realtimeStats.fuel.toFixed(1)} L / {followedTruck.fuelCapacity} L ({realtimeStats.fuelPct.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="panelDivider" />
-                  <div className="panelSection">
-                    <span className="panelLabel">Driver</span>
-                    <span className="panelValue">{followedTruck.driver}</span>
-                  </div>
-                  <div className="panelGrid">
-                    <div className="panelGridItem">
-                      <span className="panelLabel">License Plate</span>
-                      <span className="panelValue">{followedTruck.plate}</span>
-                    </div>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Driver ID Tag</span>
-                      <span className="panelValue">{followedTruck.driverIdTag}</span>
-                    </div>
-                  </div>
-                  <div className="panelSection">
-                    <span className="panelLabel">Geofence Zone</span>
-                    <span className="panelValue geofenceTag">{followedTruck.geofenceZone}</span>
-                  </div>
-                </>
-              )}
-
-              {/* MONITORING TAB */}
-              {activeTab === "monitoring" && (
-                <>
-                  {/* Safety Score Ring */}
-                  <div className="safetyScoreWidget">
-                    <div className="safetyRing" style={{ borderColor: getSafetyColor(followedTruck.driverBehavior.safetyScore) }}>
-                      <span className="safetyScoreValue">{followedTruck.driverBehavior.safetyScore}</span>
-                      <span className="safetyScoreLabel">Safety</span>
-                    </div>
-                    <div className="safetyDetails">
-                      <div className="safetyDetailItem">
-                        <span className="safetyDetailIcon" style={{ color: "#ef4444", fontWeight: 900 }}>!</span>
-                        <span className="safetyDetailText">Speeding: {followedTruck.driverBehavior.speedingEvents}</span>
-                      </div>
-                      <div className="safetyDetailItem">
-                        <span className="safetyDetailIcon" style={{ color: "#f59e0b" }}>⏹</span>
-                        <span className="safetyDetailText">Hard Braking: {followedTruck.driverBehavior.harshBraking}</span>
-                      </div>
-                      <div className="safetyDetailItem">
-                        <span className="safetyDetailIcon" style={{ color: "#8b5cf6" }}>↩</span>
-                        <span className="safetyDetailText">Sharp Turns: {followedTruck.driverBehavior.sharpTurns}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="panelDivider" />
-
-                  {/* Fuel Consumption Chart */}
-                  <div className="panelSection">
-                    <span className="panelLabel">Fuel Consumption (7 days)</span>
-                    <div className="miniChart">
-                      {fuelChartData.map((val, i) => (
-                        <div key={i} className="miniChartCol">
-                          <div className="miniChartBar" style={{ height: `${val}%`, background: val < 40 ? "#ef4444" : `${followedTruck.color}cc` }} />
-                          <span className="miniChartLabel">{fuelChartDays[i]}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="panelValue" style={{ fontSize: 13, marginTop: 4 }}>
-                      Avg: {followedTruck.fuelConsumption} L/100km
-                    </div>
-                  </div>
-                  <div className="panelDivider" />
-
-                  {/* Monitoring data grid */}
-                  <div className="panelGrid">
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Temperature</span>
-                      <span className="panelValue" style={{ color: followedTruck.temperature > 7 ? "#ef4444" : "#22c55e" }}>
-                        {followedTruck.temperature}°C
-                      </span>
-                    </div>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Engine Hours</span>
-                      <span className="panelValue">{followedTruck.engineHours.toLocaleString()} h</span>
-                    </div>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Odometer</span>
-                      <span className="panelValue">{followedTruck.odometer.toLocaleString()} km</span>
-                    </div>
-                    <div className="panelGridItem">
-                      <span className="panelLabel">Avg Consumption</span>
-                      <span className="panelValue">{followedTruck.fuelConsumption} L/100km</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* ALERTS TAB */}
-              {activeTab === "alerts" && (
-                <>
-                  <div className="panelSection">
-                    <span className="panelLabel">Recent Alerts for {followedTruck.name}</span>
-                  </div>
-                  <div className="truckAlertsList">
-                    {truckAlerts.map((alert, i) => (
-                      <div key={i} className={`truckAlertItem alert-${alert.type}`}>
-                        <span className="truckAlertDot">
-                          {alert.type === "danger" ? "•" : alert.type === "warning" ? "•" : alert.type === "success" ? "•" : "•"}
-                        </span>
+                        key={a.id}
+                        className={`truckAlertItem ${
+                          a.severity === "kritis" ? "alert-danger" : a.severity === "peringatan" ? "alert-warning" : "alert-info"
+                        }`}
+                      >
                         <div className="truckAlertContent">
-                          <span className="truckAlertText">{alert.text}</span>
-                          <span className="truckAlertTime">{alert.time} ago</span>
+                          <span className="truckAlertText">{a.title}</span>
+                          <span className="truckAlertMsg">{a.message}</span>
+                          <span className="truckAlertTime">{a.clock}</span>
                         </div>
                       </div>
                     ))}
-                  </div>
-                </>
+                </div>
               )}
             </div>
           </div>
         </>
       )}
 
-      {/* Truck list (when not following) */}
-      {routeLoaded && !isFollowing && (
-        <div className="truckList">
-          <h4 className="truckListTitle">FLEET ({TRUCKS.length})</h4>
-          {TRUCKS.map((truck) => (
-            <button
-              key={truck.id}
-              className="truckListItem"
-              onClick={() => enterFollowModeRef.current(truck.id)}
-            >
-              <div className="truckDot" style={{ background: truck.color }} />
-              <div className="truckItemInfo">
-                <div className="truckItemNameRow">
-                  <span className="truckItemName">{truck.name}</span>
-                  <span className="truckItemStatusDot" style={{ background: STATUS_CONFIGS[truck.status].color }}>
-                    {STATUS_CONFIGS[truck.status].icon}
-                  </span>
-                </div>
-                <span className="truckItemRoute">{truck.routeLabel}</span>
-                <span className="truckItemDriver">{truck.driver}</span>
-              </div>
-              <div className="truckItemRight">
-                <div className="truckItemFuel">
-                  <div className="fuelBarSmall">
-                    <div
-                      className="fuelFill"
-                      style={{
-                        width: `${truck.fuelPercent}%`,
-                        background: truck.fuelPercent < 40
-                          ? "#ef4444"
-                          : truck.color,
-                      }}
-                    />
-                  </div>
-                  <span className="fuelText">{truck.fuelPercent}%</span>
-                </div>
-                {truck.lastAlert && (
-                  <span className="truckAlertTag">{truck.lastAlert}</span>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="mapControls">
-        {routeLoaded && (
-          <button
-            className="controlBtn playPauseBtn"
-            onClick={() => setIsPlaying((p) => !p)}
-            title={isPlaying ? "Pause" : "Play"}
-          >
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
-        )}
-      </div>
-
-      <div className={`mapLoading ${isLoaded ? "loaded" : ""}`}>
+      <div className={`mapLoading ${tripsReady ? "loaded" : ""}`}>
         <div className="loadingContent">
           <div className="loadingSpinner" />
-          <span className="loadingText">Loading Cartrack Fleet...</span>
+          <span className="loadingText">{isLoaded ? "Menyiapkan rute & data GPS…" : "Memuat peta…"}</span>
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Sub-komponen ─────────────────────────────────────────────
+
+function TruckRow({ trip, state, onClick }: { trip: Trip; state: TripState; onClick: () => void }) {
+  const total = state.validatedStops.length;
+  const missed = state.statuses.filter((s) => s === "terlewat").length;
+  const unverified = state.statuses.filter((s) => s === "tak_terverifikasi").length;
+  const progress = Math.min(100, (state.t / trip.durationS) * 100);
+  return (
+    <button className="truckListItem" onClick={onClick}>
+      <div className="truckDot" style={{ background: trip.vehicle.color }} />
+      <div className="truckItemInfo">
+        <div className="truckItemNameRow">
+          <span className="truckItemName">{trip.vehicle.code}</span>
+          <span className="truckItemPlate">{trip.vehicle.plate}</span>
+        </div>
+        <span className="truckItemRoute">
+          {trip.assignment.routeName} · {trip.vehicle.type}
+        </span>
+        <div className="progressBar">
+          <div className="progressFill" style={{ width: `${progress}%`, background: trip.vehicle.color }} />
+        </div>
+        <div className="truckItemChips">
+          <span className={`chip ${state.deviations.length ? "chipBad" : "chipOk"}`}>
+            {state.deviations.length ? "Keluar rute" : "Rute sesuai"}
+          </span>
+          <span className={`chip ${missed ? "chipBad" : unverified ? "chipWarn" : "chipMuted"}`}>
+            TPS {state.servedCount}/{total}
+          </span>
+          <span className={`chip ${state.fuel ? FUEL_CHIP[state.fuel.status] : "chipMuted"}`}>
+            BBM {state.fuel ? FUEL_LABEL[state.fuel.status] : "berjalan"}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function Row({ k, v, tone }: { k: string; v: React.ReactNode; tone?: "ok" | "warn" | "bad" }) {
+  return (
+    <div className="kvRow">
+      <span className="kvKey">{k}</span>
+      <span className={`kvVal ${tone ? `tone-${tone}` : ""}`}>{v}</span>
+    </div>
+  );
+}
+
+function SummaryTab({ trip, state }: { trip: Trip; state: TripState }) {
+  const v = trip.vehicle;
+  const departS = clockAt(trip, 0);
+  return (
+    <>
+      <div className="panelSection">
+        <span className="panelLabel">Penugasan</span>
+        <Row k="Rute" v={trip.assignment.routeName} />
+        <Row k="Kendaraan" v={`${v.model} (${v.type})`} />
+        <Row k="Pengemudi" v={v.driver} />
+        <Row k="Berangkat" v={formatClock(departS)} />
+      </div>
+      <div className="panelDivider" />
+      <div className="statGrid">
+        <div className="statTile">
+          <span className="panelLabel">Jarak GPS</span>
+          <span className="statTileValue">{state.gpsDistanceKm.toFixed(2)} km</span>
+        </div>
+        <div className="statTile">
+          <span className="panelLabel">Kecepatan</span>
+          <span className="statTileValue">{state.speedKmh} km/j</span>
+        </div>
+        <div className="statTile">
+          <span className="panelLabel">TPS terlayani</span>
+          <span className="statTileValue">
+            {state.servedCount}/{state.validatedStops.length}
+          </span>
+        </div>
+        <div className="statTile">
+          <span className="panelLabel">Kepatuhan rute</span>
+          <span className={`statTileValue ${state.compliancePct < 95 ? "tone-bad" : ""}`}>{state.compliancePct.toFixed(1)}%</span>
+        </div>
+        <div className="statTile" style={{ gridColumn: "1 / -1" }}>
+          <span className="panelLabel">Anomaly Score (ML Pattern)</span>
+          <span className={`statTileValue ${state.anomaly?.isAnomaly ? "tone-bad" : "tone-ok"}`}>
+            {state.anomaly ? `${state.anomaly.score}%` : "Menunggu selesai"}
+          </span>
+        </div>
+      </div>
+      <div className="panelDivider" />
+      <div className="panelSection">
+        <span className="panelLabel">Kualitas data GPS</span>
+        <Row k="Ping diterima" v={`${state.pingCount} (interval ${v.gpsIntervalS} dtk)`} />
+        <Row
+          k="Ketersediaan data"
+          v={`${state.availabilityPct.toFixed(1)}%`}
+          tone={state.availabilityPct >= AVAILABILITY_TARGET_PCT ? "ok" : "bad"}
+        />
+        <Row k="Celah sinyal" v={state.gaps.length ? `${state.gaps.length}×` : "Tidak ada"} />
+      </div>
+    </>
+  );
+}
+
+function FuelTab({ trip, state }: { trip: Trip; state: TripState }) {
+  const p = trip.vehicle.fuel;
+  const est = state.fuel?.estimatedL ?? state.fuelEstimateL;
+  const dev = state.fuel;
+  return (
+    <>
+      <div className="panelSection">
+        <span className="panelLabel">Parameter konsumsi kendaraan</span>
+        <Row k="Rasio jalan" v={`${p.kmPerLiter} km/L`} />
+        <Row k="Tambahan per TPS" v={`${p.literPerStop} L (hidrolik/PTO)`} />
+      </div>
+      <div className="formulaBox">
+        Estimasi Prediksi ML (Fuel Consumption Anomaly Detection)
+        <br />= Baseline + Penyesuaian Variabel ML (Jarak, Kecepatan, Idle, Muatan) ={" "}
+        <strong>{state.fuelEstimateL.toFixed(2)} L</strong>
+      </div>
+      <div className="panelDivider" />
+      <div className="panelSection">
+        <span className="panelLabel">Rekonsiliasi dengan BBM administrasi</span>
+        <div className="fuelCompare">
+          <FuelBar label="Estimasi GPS" value={est} max={Math.max(est, trip.adminFuelL) * 1.1} color="#0044ff" />
+          <FuelBar label="Administrasi" value={trip.adminFuelL} max={Math.max(est, trip.adminFuelL) * 1.1} color="#111111" />
+        </div>
+        {dev ? (
+          <>
+            <Row
+              k="Selisih"
+              v={`${dev.deviationL > 0 ? "+" : ""}${dev.deviationL.toFixed(2)} L (${dev.deviationPct > 0 ? "+" : ""}${dev.deviationPct.toFixed(1)}%)`}
+              tone={dev.status === "wajar" ? "ok" : dev.status === "perlu_cek" ? "warn" : "bad"}
+            />
+            <div className={`verdict verdict-${dev.status}`}>{FUEL_LABEL[dev.status]}</div>
+          </>
+        ) : (
+          <p className="muted">Rekonsiliasi final dihitung setelah ritase selesai. Estimasi di atas masih berjalan.</p>
+        )}
+        <p className="muted small">
+          Ambang: ≤{DEFAULT_FUEL_THRESHOLDS.warnPct}% wajar · ≤{DEFAULT_FUEL_THRESHOLDS.anomalyPct}% perlu cek · &gt;
+          {DEFAULT_FUEL_THRESHOLDS.anomalyPct}% anomali
+        </p>
+      </div>
+    </>
+  );
+}
+
+function FuelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  return (
+    <div className="fuelCompareRow">
+      <span className="fuelCompareLabel">{label}</span>
+      <div className="fuelBar">
+        <div className="fuelFill" style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color }} />
+      </div>
+      <span className="fuelCompareValue">{value.toFixed(1)} L</span>
+    </div>
+  );
+}
+
+function RouteTab({ trip, state }: { trip: Trip; state: TripState }) {
+  return (
+    <>
+      <div className="panelSection">
+        <span className="panelLabel">Validasi rute standar</span>
+        <Row k="Panjang rute standar" v={`${(trip.plannedLengthM / 1000).toFixed(2)} km`} />
+        <Row k="Kepatuhan" v={`${state.compliancePct.toFixed(1)}%`} tone={state.deviations.length ? "bad" : "ok"} />
+        {state.deviations.map((d, i) => (
+          <div key={i} className="devItem">
+            Keluar rute {formatClock(clockAt(trip, d.startT))}
+            {d.ongoing ? " – sekarang" : `–${formatClock(clockAt(trip, d.endT))}`}: {(d.lengthM / 1000).toFixed(2)} km, maks.{" "}
+            {Math.round(d.maxDistanceM)} m
+          </div>
+        ))}
+        <p className="muted small">
+          Keluar rute bila ≥{DEFAULT_ROUTE_OPTIONS.minConsecutive} ping berurutan berjarak &gt;{DEFAULT_ROUTE_OPTIONS.thresholdM} m dari
+          rute standar.
+        </p>
+      </div>
+      <div className="panelDivider" />
+      <div className="panelSection">
+        <span className="panelLabel">Kunjungan titik pelayanan</span>
+        <ol className="stopList">
+          {state.validatedStops.map((s, i) => {
+            const st = state.statuses[i];
+            const v = state.visits[i];
+            return (
+              <li key={s.id} className={`stopItem stop-${st}`}>
+                <span className="stopName">[{STOP_LABEL[st]}] {s.name}</span>
+                <span className="stopMeta">
+                  {st === "terlayani" && v.arrivedT !== null
+                    ? `Tiba ${formatClock(clockAt(trip, v.arrivedT))} · berhenti ${Math.round(v.dwellS / 60)} mnt`
+                    : st === "terlewat"
+                      ? `Tidak berhenti (terdekat ${Math.round(v.minDistanceM)} m)`
+                      : st === "tak_terverifikasi"
+                        ? "UNVERIFIED: data GPS terputus di lokasi"
+                        : "Menunggu"}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="muted small">
+          Terlayani bila kendaraan berada ≤{DEFAULT_STOP_OPTIONS.radiusM} m dari TPS selama ≥{DEFAULT_STOP_OPTIONS.minDwellS} detik.
+        </p>
+      </div>
+    </>
   );
 }
