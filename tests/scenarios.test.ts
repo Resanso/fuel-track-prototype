@@ -47,8 +47,7 @@ function assignment(sim: Partial<Assignment["sim"]>): Assignment {
 const allStops = stops.map((s) => ({ stopId: s.id }));
 
 test("kendaraan patuh: tanpa penyimpangan, semua TPS terlayani, BBM wajar", () => {
-  // adminFuelFactor adjusted to match the new ML baseline multiplier (~1.24)
-  const trip = buildTrip(vehicle, assignment({ adminFuelFactor: 1.27 }), stops, planned, planned, allStops);
+  const trip = buildTrip(vehicle, assignment({ adminFuelFactor: 1.04 }), stops, planned, planned, allStops);
   const st = tripStateAt(trip, trip.durationS + 1);
   assert.equal(st.deviations.length, 0);
   assert.deepEqual(st.statuses, ["terlayani", "terlayani", "terlayani"]);
@@ -86,7 +85,7 @@ test("TPS yang dilewati tanpa berhenti dinyatakan terlewat", () => {
 });
 
 test("BBM administrasi +45% dari kebutuhan → anomali", () => {
-  const trip = buildTrip(vehicle, assignment({ adminFuelFactor: 1.8 }), stops, planned, planned, allStops);
+  const trip = buildTrip(vehicle, assignment({ adminFuelFactor: 1.45 }), stops, planned, planned, allStops);
   const st = tripStateAt(trip, trip.durationS + 1);
   assert.equal(st.fuel?.status, "anomali");
   assert.ok(st.fuel!.deviationPct > 35 && st.fuel!.deviationPct < 55);
